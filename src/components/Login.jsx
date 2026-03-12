@@ -1,54 +1,62 @@
 import { useState } from 'react';
 import { auth, googleProvider, db } from '../config/firebase';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-
-// IMPORTAMOS LOS ICONOS PROFESIONALES
-// Necesitas ejecutar: npm install lucide-react
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
 
-const Login = ({ onLoginSuccess }) => {
+const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
-  const checkAndCreateUser = async (user) => {
-    try {
-      const userRef = doc(db, "usuarios", user.uid);
-      const userSnap = await getDoc(userRef);
+  const checkUserAccess = async (user) => {
+    const userRef = doc(db, "usuarios", user.uid);
+    const userSnap = await getDoc(userRef);
 
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
-          email: user.email,
-          nombre: user.displayName || "Usuario Nuevo",
-          rol: "colaborador",
-          numeroEmpleado: "",
-          fechaCreacion: new Date().toISOString()
-        });
-      }
-      onLoginSuccess(user);
+    if (!userSnap.exists()) {
+      await signOut(auth);
+      setError("Acceso denegado: tu usuario no está habilitado. Contacta al administrador.");
+      return;
+    }
+
+    const uData = userSnap.data();
+    if (!uData.numeroEmpleado) {
+      await signOut(auth);
+      setError("Acceso denegado: falta número de empleado asignado.");
+      return;
+    }
+
+    const empId = String(uData.numeroEmpleado).trim();
+    const empRef = doc(db, "empleados", empId);
+    const empSnap = await getDoc(empRef);
+
+    if (!empSnap.exists()) {
+      await signOut(auth);
+      setError("Acceso denegado: empleado no encontrado.");
+      return;
+    }
+
+    // ok: ya tienes acceso y el empleado existe
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      await checkUserAccess(result.user);
     } catch (err) {
-      setError("Error al validar tu perfil de usuario.");
+      setError("Credenciales incorrectas.");
     }
   };
 
   const handleGoogleLogin = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      await checkAndCreateUser(result.user);
+      await checkUserAccess(result.user);
     } catch (err) {
-      setError("Error al conectar con Google.");
-    }
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      await checkAndCreateUser(result.user);
-    } catch (err) {
-      setError("Usuario o contraseña incorrectos.");
+      setError("Error con Google.");
     }
   };
 
@@ -59,7 +67,7 @@ const Login = ({ onLoginSuccess }) => {
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      backgroundColor: '#f8fafc', 
+      backgroundColor: '#f8fafc',
       padding: '20px',
       boxSizing: 'border-box'
     },
@@ -107,31 +115,31 @@ const Login = ({ onLoginSuccess }) => {
       position: 'relative', // Importante para posicionar los iconos
     },
     inputWithIcon: {
-        width: '100%',
-        padding: '14px 18px', // Más padding interno
-        // Padding extra a la derecha para que el texto no toque el icono
-        paddingRight: '45px', 
-        borderRadius: '8px', // Bordes más rectos, como en tu foto
-        border: '1px solid #d1d5db', // Color de borde gris suave
-        fontSize: '16px',
-        color: '#1f2937',
-        boxSizing: 'border-box',
-        outline: 'none',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
+      width: '100%',
+      padding: '14px 18px', // Más padding interno
+      // Padding extra a la derecha para que el texto no toque el icono
+      paddingRight: '45px',
+      borderRadius: '8px', // Bordes más rectos, como en tu foto
+      border: '1px solid #d1d5db', // Color de borde gris suave
+      fontSize: '16px',
+      color: '#1f2937',
+      boxSizing: 'border-box',
+      outline: 'none',
+      transition: 'border-color 0.2s, box-shadow 0.2s',
     },
     // Estilo para el icono derecho fijo (como el de usuario)
     rightIcon: {
-        position: 'absolute',
-        right: '15px',
-        top: '50%',
-        transform: 'translateY(-50%)',
-        color: '#9ca3af', // Gris suave del icono en tu foto
-        pointerEvents: 'none', // El icono no bloquea los clics en el input
+      position: 'absolute',
+      right: '15px',
+      top: '50%',
+      transform: 'translateY(-50%)',
+      color: '#9ca3af', // Gris suave del icono en tu foto
+      pointerEvents: 'none', // El icono no bloquea los clics en el input
     },
     // Contenedor para el password que incluye el input y el botón
     passwordFieldWrapper: {
-        position: 'relative',
-        width: '100%',
+      position: 'relative',
+      width: '100%',
     },
     // Estilo para el botón de ojito (que es un icono interactivo a la derecha)
     eyeButton: {
@@ -188,62 +196,62 @@ const Login = ({ onLoginSuccess }) => {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        
+
         {/* LOGO CENTRADO */}
         <div style={styles.logoContainer}>
-            <img 
+          <img
             src="/imagotipo.png" // Ruta de tu imagen
-            alt="Logo Empresa" 
-            style={styles.logo} 
-            />
+            alt="Logo Empresa"
+            style={styles.logo}
+          />
         </div>
-        
+
         <p style={styles.systemTitle}>Sistema de Delegación de Objetivos</p>
         <h2 style={styles.welcomeText}>Bienvenido</h2>
 
         <form onSubmit={handleLogin}>
           <div style={styles.inputGroup}>
             {/* CAMPO DE USUARIO (EMAIL) */}
-            <input 
-              type="email" 
+            <input
+              type="email"
               placeholder="Correo" // Placeholder exacto de tu foto
-              value={email} 
+              value={email}
               onChange={(e) => setEmail(e.target.value)}
               // Aplicamos estilos base de input con icono
               style={styles.inputWithIcon}
               required
             />
             {/* ICONO DE USUARIO A LA DERECHA (FIJO) */}
-            <User style={styles.rightIcon} size={22} strokeWidth={1.5}/>
+            <User style={styles.rightIcon} size={22} strokeWidth={1.5} />
           </div>
 
           <div style={styles.inputGroup}>
             <div style={styles.passwordFieldWrapper}>
-                {/* CAMPO DE CONTRASEÑA */}
-                <input 
-                type={showPassword ? "text" : "password"} 
+              {/* CAMPO DE CONTRASEÑA */}
+              <input
+                type={showPassword ? "text" : "password"}
                 placeholder="Contraseña" // Placeholder exacto de tu foto
-                value={password} 
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 // Aplicamos estilos base de input con icono
                 style={styles.inputWithIcon}
                 required
-                />
-                
-                {/* BOTÓN DEL OJITO (INTERACTIVO A LA DERECHA) */}
-                <button 
-                type="button" 
-                onClick={() => setShowPassword(!showPassword)} 
+              />
+
+              {/* BOTÓN DEL OJITO (INTERACTIVO A LA DERECHA) */}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
                 title={showPassword ? "Ocultar" : "Mostrar"}
-                >
+              >
                 {/* Alternamos el icono del ojito abierto/cerrado */}
                 {showPassword ? (
-                    <Eye size={20} strokeWidth={1.8}/>
+                  <Eye size={20} strokeWidth={1.8} />
                 ) : (
-                    <EyeOff size={20} strokeWidth={1.8}/>
+                  <EyeOff size={20} strokeWidth={1.8} />
                 )}
-                </button>
+              </button>
             </div>
           </div>
 

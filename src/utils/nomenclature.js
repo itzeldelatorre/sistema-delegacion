@@ -1,49 +1,57 @@
 export const generateNextName = (tasks, type, parentName = null, ownerEmail = null) => {
   const norm = (s) => (s || "").trim().toLowerCase();
+  const owner = norm(ownerEmail);
 
-  if (type === "OKR") {
-    const owner = norm(ownerEmail);
+  // --- RAÍCES: OKR y KPI ---
+  if (type === "OKR" || type === "KPI") {
+    const prefix = type;
 
-    // OKRs del dueño (no delegados) -> IdRegistroPadre vacío/null/undefined
-    const ownerRootOKRs = tasks.filter(t =>
-      t?.Tipo === "OKR" &&
-      norm(t["Correo encargado"]) === owner &&
-      !t?.IdRegistroPadre // <- excluye OKRs delegados
+    const ownerRootTasks = tasks.filter(
+      (t) =>
+        t?.tipo === type &&
+        norm(t.correoEncargado) === owner
     );
 
-    // En vez de length+1, usa el máximo existente + 1 (evita repetir si hay huecos)
-    const maxNum = ownerRootOKRs.reduce((max, t) => {
-      const m = String(t["Nombre Tarea"] || "").match(/^OKR\s+(\d+)\b/i);
-      const n = m ? parseInt(m[1], 10) : 0;
-      return Math.max(max, Number.isFinite(n) ? n : 0);
+    const maxNum = ownerRootTasks.reduce((max, t) => {
+      const regex = new RegExp(`^${prefix}\\s+(\\d+)\\b`, "i");
+      const m = String(t.nombreTarea || "").match(regex);
+      return Math.max(max, m ? parseInt(m[1], 10) : 0);
     }, 0);
 
-    return `OKR ${maxNum + 1}`;
+    return `${prefix} ${maxNum + 1}`;
   }
 
-  if (type === "KR" && parentName) {
-    const parent = String(parentName);
+  // --- HIJOS: KR y Sub-KPI ---
+  if ((type === "KR" || type === "Sub-KPI") && parentName) {
+    const parent = String(parentName).trim();
+    const childPrefix = type === "Sub-KPI" ? "KPI" : "KR";
 
-    // Captura el número COMPLETO del padre: 1, 1.2, 3.4.5, etc.
-    // Funciona si parentName empieza con "OKR 2 ..." o "KR 1.2 ..."
-    const mParent = parent.match(/^(OKR|KR)\s+(\d+(?:\.\d+)*)\b/i);
+    const mParent = parent.match(/^(OKR|KR|KPI|Sub-KPI)\s+(\d+(?:\.\d+)*)\b/i);
     const parentNum = mParent?.[2] || "X";
 
-    // Hermanos: mismo "Objetivo Padre"
-    const siblingKRs = tasks.filter(t =>
-      t?.Tipo === "KR" &&
-      String(t["Objetivo Padre"] || "").trim() === parent.trim()
+    const siblings = tasks.filter(
+      (t) =>
+        t.tipo === type &&
+        String(t.objetivoPadre || "").trim() === parent
     );
 
-    // Igual: usa máximo existente + 1 (no length+1)
-    const maxChild = siblingKRs.reduce((max, t) => {
-      const m = String(t["Nombre Tarea"] || "").match(new RegExp(`^KR\\s+${parentNum.replace(/\./g, "\\.")}\\.(\\d+)\\b`, "i"));
-      const n = m ? parseInt(m[1], 10) : 0;
-      return Math.max(max, Number.isFinite(n) ? n : 0);
+    const maxChild = siblings.reduce((max, t) => {
+      const regex = new RegExp(
+        `^${childPrefix}\\s+${parentNum.replace(/\./g, "\\.")}\\.(\\d+)\\b`,
+        "i"
+      );
+      const m = String(t.nombreTarea || "").match(regex);
+      return Math.max(max, m ? parseInt(m[1], 10) : 0);
     }, 0);
 
-    return `KR ${parentNum}.${maxChild + 1}`;
+    return `${childPrefix} ${parentNum}.${maxChild + 1}`;
   }
 
   return type;
+};
+
+export const stripNomenclature = (name) => {
+  return String(name || "")
+    .replace(/^(OKR|KR|KPI|Sub-KPI)\s+(\d+(?:\.\d+)*)\s+/i, "")
+    .trim();
 };
